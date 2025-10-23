@@ -1,0 +1,20 @@
+## License
+
+Goliat is licensed under the Apache License 2.0. This is a permissive license that lets you:
+
+- Use this library in proprietary (closed-source) software
+- Modify the library for your needs
+- Distribute the library as part of your software
+
+The main requirements are:
+- Include a copy of the Apache 2.0 license
+- State that you're using Goliat (attribution)
+- If you modify Goliat's source code, clearly indicate your changes
+- Preserve any existing copyright notices
+
+You don't need to:
+- Make your entire application open source
+- Pay any fees or royalties
+- Ask for permission to use in commercial projects
+
+For the complete terms, see the [LICENSE](LICENSE) file.
