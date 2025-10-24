@@ -1,5 +1,6 @@
 # Goliat
 [![codecov](https://codecov.io/gh/filcuc/goliat/graph/badge.svg?token=NRTHurmebQ)](https://codecov.io/gh/filcuc/goliat)
+[![Go Reference](https://pkg.go.dev/badge/github.com/filcuc/goliat.svg)](https://pkg.go.dev/github.com/filcuc/goliat)
 
 `goliat` is a small, low-level Go wrapper around the SQLite C API. It provides direct access to SQLite features (including BLOB operations and prepared statements) while keeping the implementation lightweight and easy to inspect or fork.
 
