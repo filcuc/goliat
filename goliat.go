@@ -207,6 +207,10 @@ func (d *Connection) newDatabaseError() *DatabaseError {
 	return newDatabaseError(d.LastErrorCode(), d.LastErrorMessage())
 }
 
+func (d *Connection) Changes() int64 {
+	return int64(C.sqlite3_changes64(d.h.ptr))
+}
+
 func (d *Connection) LastInsertRowId() int64 {
 	return int64(C.sqlite3_last_insert_rowid(d.h.ptr))
 }
@@ -739,4 +743,36 @@ func (r *BlobReader) Seek(offset int64, whence int) (int64, error) {
 
 	r.offset = newOffset
 	return int64(r.offset), nil
+}
+
+type Transaction struct {
+	db       *Connection
+	finished bool
+}
+
+func (d *Connection) BeginTransaction() (*Transaction, error) {
+	err := d.Exec("BEGIN TRANSACTION;")
+	if err != nil {
+		return nil, err
+	}
+
+	result := &Transaction{db: d, finished: false}
+
+	runtime.AddCleanup(result, func(db *Connection) {
+		if !result.finished {
+			db.Exec("ROLLBACK;")
+		}
+	}, result.db)
+
+	return result, nil
+}
+
+func (t *Transaction) Commit() error {
+	t.finished = true
+	return t.db.Exec("COMMIT;")
+}
+
+func (t *Transaction) Rollback() error {
+	t.finished = true
+	return t.db.Exec("ROLLBACK;")
 }

@@ -398,3 +398,63 @@ func TestQueryRow(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "baz", bar)
 }
+
+func TestChanges(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE foo (bar TEXT)")
+	assert.NoError(t, err)
+
+	stmt, err := db.Prepare("INSERT INTO foo (bar) VALUES (?)")
+	assert.NoError(t, err)
+	stmt.Bind("baz")
+	assert.NoError(t, err)
+	assert.Equal(t, goliat.DONE, stmt.Step())
+	assert.Equal(t, int64(1), db.Changes())
+}
+
+func TestTransactionRollback(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE foo (bar TEXT)")
+	assert.NoError(t, err)
+
+	tx, err := db.BeginTransaction()
+	assert.NoError(t, err)
+	err = db.Exec("INSERT INTO foo (bar) VALUES (?)", "baz")
+	assert.NoError(t, err)
+
+	err = tx.Rollback()
+	assert.NoError(t, err)
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM foo WHERE bar = ?", "baz").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+func TestTransactionCommit(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE foo (bar TEXT)")
+	assert.NoError(t, err)
+
+	tx, err := db.BeginTransaction()
+	assert.NoError(t, err)
+	err = db.Exec("INSERT INTO foo (bar) VALUES (?)", "baz")
+	assert.NoError(t, err)
+
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM foo WHERE bar = ?", "baz").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+}

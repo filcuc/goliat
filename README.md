@@ -17,6 +17,7 @@ A `goliat` database connection is intended to be used by a single goroutine. If 
 - Query data using iterators.
 - Manage prepared statements.
 - Read and write BLOBs; supports `io.Reader`, `io.ReaderAt`, and `io.Seeker`.
+- Transaction support with automatic rollbacks
 - Custom struct serialization/deserialization via small interface methods.
 - Resource cleanup integration using `runtime.AddCleanup` (Go 1.24).
 
