@@ -458,3 +458,17 @@ func TestTransactionCommit(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 }
+
+func TestQueryRowShouldErrorNotFoundIfNoResult(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE foo (bar TEXT)")
+	assert.NoError(t, err)
+
+	var bar string
+	err = db.QueryRow("SELECT bar FROM foo WHERE bar = ?", "nonexistent").Scan(&bar)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, goliat.ErrNoRows)
+}

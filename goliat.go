@@ -87,6 +87,8 @@ func newDatabaseError(code ErrorCode, message string) *DatabaseError {
 	return &DatabaseError{Code: code, Message: message}
 }
 
+var ErrNoRows = io.EOF
+
 type stringHandle struct {
 	ptr *C.char
 }
@@ -292,7 +294,7 @@ func (r *QueryIterator) Scan(dest ...any) error {
 	if !r.done {
 		return r.stmt.Column(dest...)
 	}
-	return io.EOF
+	return ErrNoRows
 }
 
 func (r *QueryIterator) Close() error {
@@ -320,7 +322,7 @@ func (r *QueryRowResult) Scan(dest ...any) error {
 	if r.iterator.err != nil {
 		return r.iterator.err
 	}
-	return io.EOF
+	return ErrNoRows
 }
 
 func (d *Connection) Prepare(sql string) (*Statement, error) {
