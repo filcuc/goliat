@@ -122,32 +122,28 @@ func TestStatementBindAndColumn(t *testing.T) {
 	assert.NoError(t, err)
 	defer db.Close()
 
-	stmt, err := db.Prepare("CREATE TABLE User (name TEXT, age INTEGER, height REAL, picture BLOB, nilBlob BLOB)")
-	assert.NoError(t, err)
-	assert.Equal(t, goliat.DONE, stmt.Step())
-
-	stmt, err = db.Prepare("INSERT INTO User (name, age, height, picture, nilBlob) VALUES (?, ?, ?, ?, ?)")
-	stmt.Bind("foo", 1, 1.1, []byte{0, 1, 2, 3}, nil)
-	assert.NoError(t, err)
-	assert.Equal(t, goliat.DONE, stmt.Step())
-
-	stmt, err = db.Prepare("SELECT name, age, height, picture, nilBlob from User")
+	err = db.Exec("CREATE TABLE User (name TEXT, age INTEGER, height REAL, picture BLOB, nilBlob BLOB, verified INTEGER)")
 	assert.NoError(t, err)
 
-	assert.Equal(t, goliat.ROW, stmt.Step())
+	err = db.Exec("INSERT INTO User (name, age, height, picture, nilBlob, verified) VALUES (?, ?, ?, ?, ?, ?)",
+		"foo", 1, 1.1, []byte{0, 1, 2, 3}, nil, true)
+	assert.NoError(t, err)
+
+	row := db.QueryRow("SELECT name, age, height, picture, nilBlob, verified from User")
+	assert.NotNil(t, row)
+
 	var name string
 	var age int
 	var height float64
 	var picture []byte
 	var nilBlob []byte
-	assert.NoError(t, stmt.Column(&name, &age, &height, &picture, &nilBlob))
+	var verified bool
+	assert.NoError(t, row.Scan(&name, &age, &height, &picture, &nilBlob, &verified))
 	assert.Equal(t, "foo", name)
 	assert.Equal(t, 1, age)
 	assert.Equal(t, 1.1, height)
 	assert.Equal(t, []byte{0, 1, 2, 3}, picture)
 	assert.Nil(t, nilBlob)
-
-	assert.Equal(t, goliat.DONE, stmt.Step())
 }
 
 func TestBlobOpen(t *testing.T) {

@@ -397,8 +397,17 @@ func (stmt *Statement) Bind(values ...any) error {
 	return nil
 }
 
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func (stmt *Statement) BindValue(index int, value any) error {
 	switch v := value.(type) {
+	case bool:
+		C.sqlite3_bind_int(stmt.h.ptr, C.int(index), C.int(boolToInt(v)))
 	case int:
 		C.sqlite3_bind_int(stmt.h.ptr, C.int(index), C.int(v))
 	case int64:
@@ -516,6 +525,9 @@ func (stmt *Statement) columnDatatype(i int) int {
 
 func (stmt *Statement) columnValue(i int, value any) error {
 	switch v := value.(type) {
+	case *bool:
+		intVal := C.sqlite3_column_int(stmt.h.ptr, C.int(i))
+		*v = intVal != 0
 	case *int:
 		*v = int(C.sqlite3_column_int(stmt.h.ptr, C.int(i)))
 	case *int64:
