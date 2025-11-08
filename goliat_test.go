@@ -468,3 +468,23 @@ func TestQueryRowShouldErrorNotFoundIfNoResult(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, goliat.ErrNoRows)
 }
+
+func TestBindZeroBlob(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE foo (bar BLOB)")
+	assert.NoError(t, err)
+
+	err = db.Exec("INSERT INTO foo (bar) VALUES (?)", goliat.ZeroBlob{Size: 10})
+	assert.NoError(t, err)
+
+	var data []byte
+	err = db.QueryRow("SELECT bar FROM foo").Scan(&data)
+	assert.NoError(t, err)
+	assert.Equal(t, 10, len(data))
+	for _, b := range data {
+		assert.Equal(t, byte(0), b)
+	}
+}

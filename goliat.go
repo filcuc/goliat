@@ -74,6 +74,10 @@ const (
 	DONE       ErrorCode = C.SQLITE_DONE       // 101
 )
 
+type ZeroBlob struct {
+	Size uint64
+}
+
 type DatabaseError struct {
 	Code    ErrorCode
 	Message string
@@ -379,6 +383,10 @@ func (b *BindValue) SetNull() {
 	b.value = nil
 }
 
+func (b *BindValue) SetZeroBlob(size uint64) {
+	b.value = ZeroBlob{Size: size}
+}
+
 type BindHandler interface {
 	ToSQLiteValue() BindValue
 }
@@ -426,6 +434,8 @@ func (stmt *Statement) BindValue(index int, value any) error {
 		C.sqlite3_bind_text(stmt.h.ptr, C.int(index), cvalue.h.ptr, -1, C.transient)
 	case nil:
 		C.sqlite3_bind_null(stmt.h.ptr, C.int(index))
+	case ZeroBlob:
+		C.sqlite3_bind_zeroblob64(stmt.h.ptr, C.int(index), C.sqlite3_uint64(v.Size))
 	default:
 		if handler, ok := value.(BindHandler); ok {
 			return stmt.BindValue(index, handler.ToSQLiteValue().value)
