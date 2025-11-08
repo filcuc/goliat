@@ -168,6 +168,22 @@ func newDatabaseStatement(db *Connection, handle *statementHandle) *Statement {
 	return result
 }
 
+func (s *Statement) Reset() error {
+	ec := C.sqlite3_reset(s.h.ptr)
+	if ec != C.SQLITE_OK {
+		return s.db.newDatabaseError()
+	}
+	return nil
+}
+
+func (s *Statement) ClearBindings() error {
+	ec := C.sqlite3_clear_bindings(s.h.ptr)
+	if ec != C.SQLITE_OK {
+		return s.db.newDatabaseError()
+	}
+	return nil
+}
+
 type Connection struct {
 	h *connectionHandle
 }

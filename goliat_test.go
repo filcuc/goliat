@@ -488,3 +488,49 @@ func TestBindZeroBlob(t *testing.T) {
 		assert.Equal(t, byte(0), b)
 	}
 }
+
+func TestStatementReset(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE foo (bar TEXT)")
+	assert.NoError(t, err)
+
+	stmt, err := db.Prepare("INSERT INTO foo (bar) VALUES (?)")
+	assert.NoError(t, err)
+
+	stmt.Bind("baz")
+	assert.Equal(t, goliat.DONE, stmt.Step())
+
+	stmt.Reset()
+
+	stmt.Bind("qux")
+	assert.Equal(t, goliat.DONE, stmt.Step())
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM foo WHERE bar IN (?, ?)", "baz", "qux").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, count)
+}
+
+func TestStatementClearBindings(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE foo (bar TEXT)")
+	assert.NoError(t, err)
+	stmt, err := db.Prepare("INSERT INTO foo (bar) VALUES (?)")
+	assert.NoError(t, err)
+
+	stmt.Bind("baz")
+	stmt.ClearBindings()
+	stmt.Bind("qux")
+	assert.Equal(t, goliat.DONE, stmt.Step())
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM foo WHERE bar = ?", "qux").Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
