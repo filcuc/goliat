@@ -662,32 +662,78 @@ func (b *Blob) Read(offset int, length int) ([]byte, error) {
 		return nil, newDatabaseError(ErrorCode(C.SQLITE_ERROR), fmt.Sprintf("offset %d + length %d = %d exceed blob size %d", offset, length, offset+length, b.Bytes()))
 	}
 
+	data := make([]byte, length)
+
 	offsetRaw := C.int(offset)
 	lengthRaw := C.int(length)
 
-	result := make([]byte, length)
-	ec := C.sqlite3_blob_read(b.h.ptr, unsafe.Pointer(&result[0]), lengthRaw, offsetRaw)
-	var err error = nil
+	ec := C.sqlite3_blob_read(b.h.ptr, unsafe.Pointer(&data[0]), lengthRaw, offsetRaw)
 	if ec != C.SQLITE_OK {
-		err = b.db.newDatabaseError()
+		return nil, b.db.newDatabaseError()
 	}
-	return result, err
+	return data, nil
 }
 
-type BlobReader struct {
+func (b *Blob) Write(offset int, data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+
+	if offset+len(data) > b.Bytes() {
+		return newDatabaseError(ErrorCode(C.SQLITE_ERROR), fmt.Sprintf("offset %d + length %d = %d exceed blob size %d", offset, len(data), offset+len(data), b.Bytes()))
+	}
+
+	offsetRaw := C.int(offset)
+	lengthRaw := C.int(len(data))
+
+	ec := C.sqlite3_blob_write(b.h.ptr, unsafe.Pointer(&data[0]), lengthRaw, offsetRaw)
+	if ec != C.SQLITE_OK {
+		return b.db.newDatabaseError()
+	}
+	return nil
+}
+
+func (b *Blob) ReadAt(p []byte, offset int64) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	if int(offset)+len(p) > b.Bytes() {
+		return 0, newDatabaseError(ErrorCode(C.SQLITE_ERROR), fmt.Sprintf("offset %d + length %d = %d exceed blob size %d", offset, len(p), int(offset)+len(p), b.Bytes()))
+	}
+
+	offsetRaw := C.int(int(offset))
+	lengthRaw := C.int(len(p))
+
+	ec := C.sqlite3_blob_read(b.h.ptr, unsafe.Pointer(&p[0]), lengthRaw, offsetRaw)
+	if ec != C.SQLITE_OK {
+		return 0, b.db.newDatabaseError()
+	}
+	return len(p), nil
+}
+
+func (b *Blob) WriteAt(p []byte, offset int64) (int, error) {
+	err := b.Write(int(offset), p)
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+type BlobStream struct {
 	blob   *Blob
 	offset int
 }
 
-func NewBlobReader(blob *Blob) *BlobReader {
-	result := &BlobReader{blob: blob, offset: 0}
+func NewBlobStream(blob *Blob) *BlobStream {
+	result := &BlobStream{blob: blob, offset: 0}
 	runtime.AddCleanup(result, func(h *Blob) {
 		h.Close()
 	}, result.blob)
 	return result
 }
 
-func (r *BlobReader) Read(p []byte) (int, error) {
+func (r *BlobStream) Read(p []byte) (int, error) {
 	if r.blob == nil || r.blob.h == nil || r.blob.h.ptr == nil {
 		return 0, newDatabaseError(ErrorCode(C.SQLITE_MISUSE), "invalid blob handle")
 	}
@@ -719,7 +765,7 @@ func (r *BlobReader) Read(p []byte) (int, error) {
 }
 
 // Close closes the underlying blob.
-func (r *BlobReader) Close() error {
+func (r *BlobStream) Close() error {
 	if r.blob != nil {
 		r.blob.Close()
 		r.blob = nil
@@ -727,38 +773,9 @@ func (r *BlobReader) Close() error {
 	return nil
 }
 
-// ReadAt implements io.ReaderAt.
-// It reads len(p) bytes from the given absolute offset in the blob.
-func (r *BlobReader) ReadAt(p []byte, off int64) (int, error) {
-	if r.blob == nil || r.blob.h == nil || r.blob.h.ptr == nil {
-		return 0, newDatabaseError(ErrorCode(C.SQLITE_MISUSE), "invalid blob handle")
-	}
-
-	blobSize := r.blob.Bytes()
-	if int(off) >= blobSize {
-		return 0, io.EOF
-	}
-
-	toRead := len(p)
-	if int(off)+toRead > blobSize {
-		toRead = blobSize - int(off)
-	}
-
-	data, err := r.blob.Read(int(off), toRead)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return 0, err
-	}
-
-	copy(p, data)
-	if int(off)+toRead >= blobSize {
-		return toRead, io.EOF
-	}
-	return toRead, nil
-}
-
 // Seek implements io.Seeker.
 // It sets the offset for the next Read or Write to offset, interpreted according to whence.
-func (r *BlobReader) Seek(offset int64, whence int) (int64, error) {
+func (r *BlobStream) Seek(offset int64, whence int) (int64, error) {
 	if r.blob == nil || r.blob.h == nil || r.blob.h.ptr == nil {
 		return 0, newDatabaseError(ErrorCode(C.SQLITE_MISUSE), "invalid blob handle")
 	}
@@ -785,23 +802,29 @@ func (r *BlobReader) Seek(offset int64, whence int) (int64, error) {
 	return int64(r.offset), nil
 }
 
-func (b *Blob) Write(offset int, data []byte) error {
-	if len(data) == 0 {
-		return nil
+func (w *BlobStream) Write(p []byte) (int, error) {
+	if w.blob == nil || w.blob.h == nil || w.blob.h.ptr == nil {
+		return 0, newDatabaseError(ErrorCode(C.SQLITE_MISUSE), "invalid blob handle")
 	}
 
-	if offset+len(data) > b.Bytes() {
-		return newDatabaseError(ErrorCode(C.SQLITE_ERROR), fmt.Sprintf("offset %d + length %d = %d exceed blob size %d", offset, len(data), offset+len(data), b.Bytes()))
+	blobSize := w.blob.Bytes()
+	if w.offset >= blobSize {
+		return 0, io.EOF
 	}
 
-	offsetRaw := C.int(offset)
-	lengthRaw := C.int(len(data))
-
-	ec := C.sqlite3_blob_write(b.h.ptr, unsafe.Pointer(&data[0]), lengthRaw, offsetRaw)
-	if ec != C.SQLITE_OK {
-		return b.db.newDatabaseError()
+	// Determine how much to write
+	toWrite := len(p)
+	if w.offset+toWrite > blobSize {
+		toWrite = blobSize - w.offset
 	}
-	return nil
+
+	err := w.blob.Write(w.offset, p[:toWrite])
+	if err != nil {
+		return 0, err
+	}
+
+	w.offset += toWrite
+	return toWrite, nil
 }
 
 type Transaction struct {

@@ -182,7 +182,7 @@ func TestBlobOpenError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestBlobReader(t *testing.T) {
+func TestBlobStreamReader(t *testing.T) {
 	db, err := goliat.Open(":memory:")
 	assert.NoError(t, err)
 	defer db.Close()
@@ -201,7 +201,7 @@ func TestBlobReader(t *testing.T) {
 	assert.NoError(t, err)
 	defer blob.Close()
 
-	reader := goliat.NewBlobReader(blob)
+	reader := goliat.NewBlobStream(blob)
 	defer reader.Close()
 
 	actualData, err := io.ReadAll(reader)
@@ -209,7 +209,7 @@ func TestBlobReader(t *testing.T) {
 	assert.Equal(t, expectedData, actualData)
 }
 
-func TestBlobReaderSeek(t *testing.T) {
+func TestBlobStreamReaderSeek(t *testing.T) {
 	db, err := goliat.Open(":memory:")
 	assert.NoError(t, err)
 	defer db.Close()
@@ -228,15 +228,103 @@ func TestBlobReaderSeek(t *testing.T) {
 	assert.NoError(t, err)
 	defer blob.Close()
 
-	reader := goliat.NewBlobReader(blob)
-	defer reader.Close()
+	stream := goliat.NewBlobStream(blob)
+	defer stream.Close()
 
-	offset, err := reader.Seek(1, io.SeekStart)
+	offset, err := stream.Seek(1, io.SeekStart)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), offset)
-	actualData, err := io.ReadAll(reader)
+	actualData, err := io.ReadAll(stream)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedData[1:], actualData)
+}
+
+func TestBlobStreamReaderSeekEnd(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE User (name TEXT, picture BLOB)")
+	assert.NoError(t, err)
+
+	err = db.Exec("INSERT INTO User (name, picture) VALUES (?, ?)", "foo", []byte{0, 1, 2, 3})
+	assert.NoError(t, err)
+
+	blob, err := db.BlobOpen(goliat.DatabaseNameMain, "User", "picture", 1, goliat.BlobOpenFlagsReadOnly)
+	assert.NoError(t, err)
+	defer blob.Close()
+
+	stream := goliat.NewBlobStream(blob)
+	defer stream.Close()
+
+	offset, err := stream.Seek(-2, io.SeekEnd)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), offset)
+	actualData, err := io.ReadAll(stream)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte{2, 3}, actualData)
+}
+
+func TestBlobStreamWriter(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE User (name TEXT, picture BLOB)")
+	assert.NoError(t, err)
+
+	err = db.Exec("INSERT INTO User (name, picture) VALUES (?, ?)", "foo", goliat.ZeroBlob{Size: 4})
+	assert.NoError(t, err)
+
+	blob, err := db.BlobOpen(goliat.DatabaseNameMain, "User", "picture", 1, goliat.BlobOpenFlagsReadWrite)
+	assert.NoError(t, err)
+	defer blob.Close()
+
+	writer := goliat.NewBlobStream(blob)
+	defer writer.Close()
+
+	newData := []byte{1, 2, 3, 4}
+	_, err = writer.Write(newData)
+	assert.NoError(t, err)
+
+	// Verify the data was written correctly
+	var picture []byte
+	err = db.QueryRow("SELECT picture FROM User WHERE name = ?", "foo").Scan(&picture)
+	assert.NoError(t, err)
+	assert.Equal(t, newData, picture)
+}
+
+func TestBlobStreamWriterSeek(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+	err = db.Exec("CREATE TABLE User (name TEXT, picture BLOB)")
+	assert.NoError(t, err)
+
+	err = db.Exec("INSERT INTO User (name, picture) VALUES (?, ?)", "foo", goliat.ZeroBlob{Size: 4})
+	assert.NoError(t, err)
+
+	blob, err := db.BlobOpen(goliat.DatabaseNameMain, "User", "picture", 1, goliat.BlobOpenFlagsReadWrite)
+	assert.NoError(t, err)
+	defer blob.Close()
+
+	stream := goliat.NewBlobStream(blob)
+	defer stream.Close()
+
+	offset, err := stream.Seek(2, io.SeekStart)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), offset)
+
+	newData := []byte{9, 8}
+	_, err = stream.Write(newData)
+	assert.NoError(t, err)
+
+	// Verify the data was written correctly
+	var picture []byte
+	err = db.QueryRow("SELECT picture FROM User WHERE name = ?", "foo").Scan(&picture)
+	assert.NoError(t, err)
+	expectedPicture := []byte{0, 0, 9, 8}
+	assert.Equal(t, expectedPicture, picture)
 }
 
 func TestBlobReadAt(t *testing.T) {
@@ -258,16 +346,41 @@ func TestBlobReadAt(t *testing.T) {
 	assert.NoError(t, err)
 	defer blob.Close()
 
-	reader := goliat.NewBlobReader(blob)
-	defer reader.Close()
-
-	offset, err := reader.Seek(1, io.SeekStart)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(1), offset)
 	actualData := make([]byte, 2)
-	_, err = reader.ReadAt(actualData, 1)
+	_, err = blob.ReadAt(actualData, 1)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedData[1:3], actualData)
+}
+
+func TestBlobWriteAt(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	stmt, err := db.Prepare("CREATE TABLE User (name TEXT, picture BLOB)")
+	assert.NoError(t, err)
+	assert.Equal(t, goliat.DONE, stmt.Step())
+
+	stmt, err = db.Prepare("INSERT INTO User (name, picture) VALUES (?, ?)")
+	expectedData := []byte{0, 1, 2, 3}
+	stmt.Bind("foo", expectedData)
+	assert.NoError(t, err)
+	assert.Equal(t, goliat.DONE, stmt.Step())
+
+	blob, err := db.BlobOpen(goliat.DatabaseNameMain, "User", "picture", 1, goliat.BlobOpenFlagsReadWrite)
+	assert.NoError(t, err)
+	defer blob.Close()
+
+	newData := []byte{9, 8}
+	_, err = blob.WriteAt(newData, 1)
+	assert.NoError(t, err)
+
+	// Verify the data was written correctly
+	var picture []byte
+	err = db.QueryRow("SELECT picture FROM User WHERE name = ?", "foo").Scan(&picture)
+	assert.NoError(t, err)
+	expectedPicture := []byte{0, 9, 8, 3}
+	assert.Equal(t, expectedPicture, picture)
 }
 
 func TestBlobClose(t *testing.T) {
