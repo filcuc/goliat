@@ -785,6 +785,25 @@ func (r *BlobReader) Seek(offset int64, whence int) (int64, error) {
 	return int64(r.offset), nil
 }
 
+func (b *Blob) Write(offset int, data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+
+	if offset+len(data) > b.Bytes() {
+		return newDatabaseError(ErrorCode(C.SQLITE_ERROR), fmt.Sprintf("offset %d + length %d = %d exceed blob size %d", offset, len(data), offset+len(data), b.Bytes()))
+	}
+
+	offsetRaw := C.int(offset)
+	lengthRaw := C.int(len(data))
+
+	ec := C.sqlite3_blob_write(b.h.ptr, unsafe.Pointer(&data[0]), lengthRaw, offsetRaw)
+	if ec != C.SQLITE_OK {
+		return b.db.newDatabaseError()
+	}
+	return nil
+}
+
 type Transaction struct {
 	db       *Connection
 	finished bool

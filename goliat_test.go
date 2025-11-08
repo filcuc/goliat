@@ -534,3 +534,31 @@ func TestStatementClearBindings(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 }
+
+func TestBlobWrite(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	err = db.Exec("CREATE TABLE User (name TEXT, picture BLOB)")
+	assert.NoError(t, err)
+
+	stmt, err := db.Prepare("INSERT INTO User (name, picture) VALUES (?, ?)")
+	assert.NoError(t, err)
+	stmt.Bind("foo", goliat.ZeroBlob{Size: 5})
+	assert.Equal(t, goliat.DONE, stmt.Step())
+
+	blob, err := db.BlobOpen(goliat.DatabaseNameMain, "User", "picture", 1, goliat.BlobOpenFlagsReadWrite)
+	assert.NoError(t, err)
+	defer blob.Close()
+
+	newData := []byte{1, 2, 3, 4, 5}
+	err = blob.Write(0, newData)
+	assert.NoError(t, err)
+
+	// Verify the data was written correctly
+	var picture []byte
+	err = db.QueryRow("SELECT picture FROM User WHERE name = ?", "foo").Scan(&picture)
+	assert.NoError(t, err)
+	assert.Equal(t, newData, picture)
+}
