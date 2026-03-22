@@ -15,7 +15,7 @@
 package goliat
 
 /*
-#cgo CFLAGS: -I.
+#cgo CFLAGS: -I. -DSQLITE_THREADSAFE=2
 #cgo LDFLAGS: -lm
 #include "sqlite3.h"
 #include <stdlib.h>
@@ -259,18 +259,7 @@ func newDatabaseConnection(handle *connectionHandle) *Connection {
 
 // Open opens a SQLite database file (creates it if it doesn’t exist)
 func Open(filename string) (*Connection, error) {
-	cfilename := newDatabaseString(filename)
-	defer cfilename.Close()
-
-	handle := connectionHandle{ptr: nil}
-	if ec := C.sqlite3_open(cfilename.h.ptr, &handle.ptr); ec != C.SQLITE_OK {
-		return nil, &DatabaseError{
-			Code:    ErrorCode(ec),
-			Message: "failed to open database",
-		}
-	}
-
-	return newDatabaseConnection(&handle), nil
+	return OpenWithFlags(filename, OpenFlagsReadWrite|OpenFlagsCreate|OpenFlagsFullMutex)
 }
 
 type OpenFlags int

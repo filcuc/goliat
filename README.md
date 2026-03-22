@@ -8,7 +8,11 @@ The project aims to be simple, hackable, and easy to adapt to your needs. The fu
 
 ## Threading
 
-A `goliat` database connection is intended to be used by a single goroutine. If you need concurrent access, create multiple connections and manage them yourself (for example, with a connection pool or a simple "create-on-demand" strategy). Connection management is intentionally left to the caller to keep the library minimal.
+`goliat` is compiled with SQLite `-DSQLITE_THREADSAFE=2` (multi-thread mode).
+
+`Open()` uses `OpenFlagsFullMutex` by default, which serialises all SQLite API calls for a connection and makes it safe to share a single connection across goroutines.
+
+If you prefer a one-connection-per-goroutine model (avoiding the mutex overhead), open each connection with `OpenFlagsNoMutex` via `OpenWithFlags`. In that case each connection must not be used concurrently.
 
 ## Features
 
@@ -40,6 +44,37 @@ if err != nil {
 }
 defer db.Close()
 ```
+
+### Opening a database with flags
+
+Use `OpenWithFlags` to control the mutex mode and other open options explicitly.
+
+```go
+// Per-connection model: no mutex overhead, but each connection must be
+// confined to a single goroutine.
+db, err := goliat.OpenWithFlags(
+    "app.db",
+    goliat.OpenFlagsReadWrite|
+        goliat.OpenFlagsCreate|
+        goliat.OpenFlagsNoMutex,
+)
+if err != nil {
+    log.Fatalf("failed to open database with flags: %v", err)
+}
+defer db.Close()
+```
+
+Common flags include:
+
+- `goliat.OpenFlagsReadOnly`
+- `goliat.OpenFlagsReadWrite`
+- `goliat.OpenFlagsCreate`
+- `goliat.OpenFlagsUri`
+- `goliat.OpenFlagsMemory`
+- `goliat.OpenFlagsNoMutex`
+- `goliat.OpenFlagsFullMutex`
+- `goliat.OpenFlagsSharedCache`
+- `goliat.OpenFlagsPrivateCache`
 
 ### Executing SQL statements
 

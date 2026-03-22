@@ -675,3 +675,11 @@ func TestBlobWrite(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, newData, picture)
 }
+
+func TestThreadSupport(t *testing.T) {
+	db, err := goliat.Open(":memory:")
+	assert.NoError(t, err)
+	defer db.Close()
+
+	assert.Equal(t, goliat.ThreadSafe(), goliat.ThreadSafeMultiThread)
+}
