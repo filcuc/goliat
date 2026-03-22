@@ -26,6 +26,18 @@ const int sqlite3_datatype_text    = SQLITE_TEXT;
 const int sqlite3_datatype_blob    = SQLITE_BLOB;
 const int sqlite3_datatype_float    = SQLITE_FLOAT;
 const int sqlite3_datatype_null    = SQLITE_NULL;
+
+int sqlite3_config_single_thread() {
+	return sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+}
+
+int sqlite3_config_multi_thread() {
+	return sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
+}
+
+int sqlite3_config_serialized() {
+	return sqlite3_config(SQLITE_CONFIG_SERIALIZED);
+}
 */
 import "C"
 
@@ -180,6 +192,55 @@ func (s *Statement) ClearBindings() error {
 	ec := C.sqlite3_clear_bindings(s.h.ptr)
 	if ec != C.SQLITE_OK {
 		return s.db.newDatabaseError()
+	}
+	return nil
+}
+
+type ThreadSafeMode int
+
+const (
+	ThreadSafeDisabled    ThreadSafeMode = 0
+	ThreadSafeSerialized  ThreadSafeMode = 1
+	ThreadSafeMultiThread ThreadSafeMode = 2
+)
+
+func ThreadSafe() ThreadSafeMode {
+	return ThreadSafeMode(C.sqlite3_threadsafe())
+}
+
+type ConfigurationOption int
+
+const (
+	ConfigSingleThread ConfigurationOption = 1
+	ConfigMultiThread  ConfigurationOption = 2
+	ConfigSerialized   ConfigurationOption = 3
+)
+
+func Config(option ConfigurationOption, arg any) error {
+	switch option {
+	case ConfigSingleThread:
+		if arg != nil {
+			return fmt.Errorf("single thread mode does not accept an argument")
+		}
+		if ec := C.sqlite3_config_single_thread(); ec != C.SQLITE_OK {
+			return newDatabaseError(ErrorCode(ec), "failed to set single thread mode")
+		}
+	case ConfigMultiThread:
+		if arg != nil {
+			return fmt.Errorf("multi thread mode does not accept an argument")
+		}
+		if ec := C.sqlite3_config_multi_thread(); ec != C.SQLITE_OK {
+			return newDatabaseError(ErrorCode(ec), "failed to set multi thread mode")
+		}
+	case ConfigSerialized:
+		if arg != nil {
+			return fmt.Errorf("serialized mode does not accept an argument")
+		}
+		if ec := C.sqlite3_config_serialized(); ec != C.SQLITE_OK {
+			return newDatabaseError(ErrorCode(ec), "failed to set serialized mode")
+		}
+	default:
+		return fmt.Errorf("unknown configuration option: %d", option)
 	}
 	return nil
 }
