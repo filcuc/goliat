@@ -273,6 +273,33 @@ func Open(filename string) (*Connection, error) {
 	return newDatabaseConnection(&handle), nil
 }
 
+type OpenFlags int
+
+const OpenFlagsReadOnly = OpenFlags(C.SQLITE_OPEN_READONLY)
+const OpenFlagsReadWrite = OpenFlags(C.SQLITE_OPEN_READWRITE)
+const OpenFlagsCreate = OpenFlags(C.SQLITE_OPEN_CREATE)
+const OpenFlagsUri = OpenFlags(C.SQLITE_OPEN_URI)
+const OpenFlagsMemory = OpenFlags(C.SQLITE_OPEN_MEMORY)
+const OpenFlagsNoMutex = OpenFlags(C.SQLITE_OPEN_NOMUTEX)
+const OpenFlagsFullMutex = OpenFlags(C.SQLITE_OPEN_FULLMUTEX)
+const OpenFlagsSharedCache = OpenFlags(C.SQLITE_OPEN_SHAREDCACHE)
+const OpenFlagsPrivateCache = OpenFlags(C.SQLITE_OPEN_PRIVATECACHE)
+
+func OpenWithFlags(filename string, flags OpenFlags) (*Connection, error) {
+	cfilename := newDatabaseString(filename)
+	defer cfilename.Close()
+
+	handle := connectionHandle{ptr: nil}
+	if ec := C.sqlite3_open_v2(cfilename.h.ptr, &handle.ptr, C.int(flags), nil); ec != C.SQLITE_OK {
+		return nil, &DatabaseError{
+			Code:    ErrorCode(ec),
+			Message: "failed to open database",
+		}
+	}
+
+	return newDatabaseConnection(&handle), nil
+}
+
 // Close closes the SQLite database
 func (d *Connection) Close() error {
 	return d.h.Close()
