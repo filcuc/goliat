@@ -917,11 +917,18 @@ func (d *Connection) BeginTransaction() (*Transaction, error) {
 
 	result := &Transaction{db: d, finished: false}
 
-	runtime.AddCleanup(result, func(db *Connection) {
-		if !result.finished {
-			db.Exec("ROLLBACK;")
+	type cleanupData struct {
+		connection *Connection
+		finished *bool
+	}
+
+	data:= &cleanupData{connection: d, finished: &result.finished}
+
+	runtime.AddCleanup(result, func(data *cleanupData) {
+		if !*data.finished {
+			data.connection.Exec("ROLLBACK;")
 		}
-	}, result.db)
+	}, data)
 
 	return result, nil
 }
